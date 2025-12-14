@@ -3,7 +3,6 @@ import re
 from util import *
 from yt_dlp import YoutubeDL
 
-OUTPUT_FOLDER = "output"
 
 # -----------------------------
 # 파일명 안전화

@@ -4,7 +4,7 @@ from util import *
 from yt_dlp import YoutubeDL
 
 FFMPEG_PATH = r"C:\ProgramData\chocolatey\bin"
-OUTPUT_FOLDER = "output"
+OUTPUT_FOLDER = "output" if os.getcwd()!='C:\App' else "YTDL\output"
 
 # -----------------------------
 # 파일명 안전화

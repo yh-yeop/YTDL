@@ -3,9 +3,6 @@ import re
 from util import *
 from yt_dlp import YoutubeDL
 
-FFMPEG_PATH = r"C:\ProgramData\chocolatey\bin"  # ffmpeg.exe와 ffprobe.exe 경로
-OUTPUT_FOLDER = "output"
-
 # -----------------------------
 # 파일명 안전화
 # -----------------------------

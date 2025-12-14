@@ -2,6 +2,9 @@ import re
 import webvtt
 import os
 
+FFMPEG_PATH = r"C:\ProgramData\chocolatey\bin"
+OUTPUT_FOLDER = "output" if os.getcwd()!='C:\App' else "YTDL\output"
+
 def vtt_to_lrc(vtt_path, lrc_path):
     ZERO_WIDTH = r"[\u200B\u200C\u200D\uFEFF]"
 
