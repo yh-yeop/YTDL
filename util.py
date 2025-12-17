@@ -5,6 +5,58 @@ import os
 FFMPEG_PATH = r"C:\ProgramData\chocolatey\bin"
 OUTPUT_FOLDER = "output" if os.getcwd()!='C:\App' else "YTDL\output"
 
+ARTIST_RULES = [
+    {
+        "keys": [
+            "아이리 칸나 Music Official",
+        ],
+        "artist": "아이리 칸나 AIRI KANNA",
+        "album": "Covers",
+        "album_artist": "스텔라이브 StelLive"
+    },
+    {
+        "keys": [
+            "아야츠노 유니 AYATSUNO YUNI",
+            "사키하네 후야 SAKIHANE HUYA",
+            "시라유키 히나 SHIRAYUKI HINA",
+            "네네코 마시로 NENEKO MASHIRO",
+            "아카네 리제 AKANE LIZE",
+            "아라하시 타비 ARAHASHI TABI",
+            "텐코 시부키 TENKO SHIBUKI",
+            "아오쿠모 린 AOKUMO RIN",
+            "하나코 나나 HANAKO NANA",
+            "유즈하 리코 YUZUHA RIKO",
+        ],
+        "album": "Covers",
+        "album_artist": "스텔라이브 StelLive"
+    }
+]
+
+DEFAULT_ALBUM = "YTDL"
+
+
+REMOVE_NAMES = [
+    "아이리 칸나", "AIRI KANNA",
+    "아야츠노 유니", "AYATSUNO YUNI",
+    "사키하네 후야", "SAKIHANE HUYA",
+    "시라유키 히나", "SHIRAYUKI HINA",
+    "네네코 마시로", "NENEKO MASHIRO",
+    "아카네 리제", "AKANE LIZE",
+    "아라하시 타비", "ARAHASHI TABI",
+    "텐코 시부키", "TENKO SHIBUKI",
+    "아오쿠모 린", "AOKUMO RIN",
+    "하나코 나나", "HANAKO NANA",
+    "유즈하 리코", "YUZUHA RIKO",
+    " x "
+]
+
+X_DETECTED_ARTIST = "스텔라이브 StelLive"
+
+def normalize_title(title: str) -> str:
+    # cover / COVER / CoVeR → Cover
+    return re.sub(r'cover', 'Cover', title, flags=re.IGNORECASE)
+
+
 def vtt_to_lrc(vtt_path, lrc_path):
     ZERO_WIDTH = r"[\u200B\u200C\u200D\uFEFF]"
 
@@ -50,7 +102,7 @@ def vtt_to_lrc(vtt_path, lrc_path):
     # ------------------------------
     # 3. 문장별 중복 제거 (개선된 방식)
     # ------------------------------
-    TH = 800  # ms
+    TH = 50  # ms
     merged = []
     last_seen = {}  # text -> last timestamp
 
