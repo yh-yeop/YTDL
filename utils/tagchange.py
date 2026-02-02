@@ -2,7 +2,7 @@ import os
 import subprocess
 
 # 여기 경로만 바꿔서 사용
-folder_path = "output" if os.getcwd() != 'C:\\App' else "YTDL\\output"
+folder_path = r".\output\001"
 
 for filename in os.listdir(folder_path):
     if filename.lower().endswith(".mp3"):
