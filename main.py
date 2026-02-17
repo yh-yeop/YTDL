@@ -57,7 +57,7 @@ def remove_names(title: str):
     for name in REMOVE_NAMES:
         if a and name.lower() == " x " and re.search(re.escape(name), title, re.IGNORECASE):
             x_detected = True
-        pattern = rf'[\(\[\{{（【]\s*{re.escape(name)}\s*[\)\]\}}）】]'
+        pattern = rf'[\(\[\{{（【「]\s*{re.escape(name)}\s*[\)\]\}}）】」]'
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
         title = re.sub(re.escape(name), '', title, flags=re.IGNORECASE)
     title = re.sub(r'\s+', ' ', title).strip()

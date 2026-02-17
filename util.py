@@ -22,7 +22,7 @@ ARTIST_RULES = [
         "cover_image": "covers/Hebi.png"
     },
     {
-        "keys": ["아야츠노 유니 AYATSUNO YUNI"],
+        "keys": ["아야츠노 유니 AYATSUNO YUNI", "Ayatsuno Yuni - Topic"],
         "artist": "아야츠노 유니",
         "album": "Covers",
         "album_artist": "아야츠노 유니",
@@ -100,7 +100,7 @@ ARTIST_RULES = [
     }
 ]
 
-DEFAULT_ALBUM = "YTDL"
+DEFAULT_ALBUM = "Covers"
 
 REMOVE_NAMES = [
     "스텔라이브", "StelLive",
