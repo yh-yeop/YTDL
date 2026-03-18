@@ -1,0 +1,24 @@
+If yt-dlp subtitles aren't showing, ensure you are using the correct flags to download and embed them, as they are not included by default. Key commands include --write-subs (for creator subs), --write-auto-sub (for auto-generated), and --embed-subs to merge them into the container. 
+openSUSE Forums
+openSUSE Forums
+ +2
+Top Fixes for Missing yt-dlp Subtitles
+Download and Embed Subtitles:
+Use this command to download English subtitles and embed them into an MP4 file:
+yt-dlp --write-subs --sub-langs "en.*" --embed-subs --merge-output-format mp4 <URL>.
+Include Auto-Generated Subs:
+If the creator didn't provide subtitles, use --write-auto-sub to get YouTube's automatic captions.
+yt-dlp --write-auto-sub --embed-subs <URL>
+List Available Subtitles:
+Check what subtitles are available for a video before downloading:
+yt-dlp --list-subs <URL>.
+Update yt-dlp:
+Subtitles may fail if yt-dlp is outdated. Run yt-dlp -U to update to the latest version.
+Check Media Player:
+Some players do not enable subtitles by default. Ensure your player (e.g., VLC) is set to show subtitles automatically.
+Language Formatting:
+Use language codes properly (e.g., --sub-langs "en" or --sub-langs "en.*" for all English variations). 
+openSUSE Forums
+openSUSE Forums
+ +4
+If you are downloading audio-only, subtitles might not embed correctly. Ensure you are downloading video formats when requiring embedded subtitles. 

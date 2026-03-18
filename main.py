@@ -7,6 +7,7 @@ from mutagen.id3 import ID3, ID3NoHeaderError, TDRC, TYER
 
 FFMPEG_PATH = r"C:\ProgramData\chocolatey\bin"
 OUTPUT_FOLDER = "output" if os.getcwd() != 'C:\\App' else "YTDL\\output"
+INCLUDE_AUTO_SUBS = False  # True면 자동자막 포함
 
 # -----------------------------
 # 파일명 안전화
@@ -36,17 +37,43 @@ def list_subtitles(url):
         "quiet": True,
         "no_warnings": True
     }
+
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
 
-    subtitles = info.get("subtitles", {})
+    raw_subs = info.get("subtitles") or {}
+    auto_subs = info.get("automatic_captions") or {}
+
+    valid_subs = {}
+
+    # -----------------------------
+    # 업로드 자막 필터
+    # -----------------------------
+    for lang, tracks in raw_subs.items():
+        for t in tracks:
+            if t.get("ext") in ("vtt", "srt", "ass"):
+                valid_subs[lang] = tracks
+                break
+
+    # -----------------------------
+    # 자동자막 포함 여부 (핵심)
+    # -----------------------------
+    if INCLUDE_AUTO_SUBS:
+        for lang, tracks in auto_subs.items():
+            for t in tracks:
+                if t.get("ext") in ("vtt", "srt"):
+                    valid_subs[lang] = tracks
+                    break
+
     title = info.get("title")
     artist = info.get("channel") or info.get("uploader") or info.get("uploader_id") or ""
+
     year = ""
     upload_date = info.get("upload_date")
     if upload_date and len(upload_date) >= 4:
         year = upload_date[:4]
-    return subtitles.keys(), title, artist, year
+
+    return list(valid_subs.keys()), title, artist, year
 
 # -----------------------------
 # 곡 제목에서 특정 이름 제거 + X 감지
@@ -90,9 +117,9 @@ def resolve_album_info(artist, x_detected=False):
 def download_subtitle(url, title, lang):
     if not os.path.exists(OUTPUT_FOLDER):
         os.makedirs(OUTPUT_FOLDER)
+
     ydl_opts = {
         "skip_download": True,
-        "writesubtitles": True,
         "subtitleslangs": [lang],
         "subtitlesformat": "vtt",
         "outtmpl": f"{OUTPUT_FOLDER}/{title}.%(ext)s",
@@ -100,10 +127,16 @@ def download_subtitle(url, title, lang):
         "no_warnings": True,
         "ffmpeg_location": FFMPEG_PATH
     }
+
+    if INCLUDE_AUTO_SUBS:
+        ydl_opts["writeautomaticsub"] = True
+    else:
+        ydl_opts["writesubtitles"] = True
+
     with YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
-    return os.path.join(OUTPUT_FOLDER, f"{title}.{lang}.vtt")
 
+    return os.path.join(OUTPUT_FOLDER, f"{title}.{lang}.vtt")
 # -----------------------------
 # MP3 다운로드
 # -----------------------------
@@ -204,6 +237,7 @@ def normalize_mp3_year(mp3_path: str):
 def main():
     url = input("유튜브 링크 입력: ").strip()
     print("\n자막 언어 확인 중...", flush=True)
+
     langs, title, artist, year = list_subtitles(url)
     langs = [lang for lang in langs if lang != "live_chat"]
 
@@ -211,29 +245,8 @@ def main():
     title = normalize_title(title)
     title, x_detected = remove_names(title)
 
-    if not langs:
-        artist, album, album_artist, cover_image = resolve_album_info(artist, x_detected=x_detected)
-        print(f"\n영상 제목: {title}")
-        print(f"아티스트: {artist}")
-        print(f"앨범: {album}")
-        print(f"앨범 아티스트: {album_artist}")
-        print(f"커버 이미지: {cover_image or '없음'}")
-        print(f"연도: {year}\n")
-        choice = input("업로드 자막이 없습니다. MP3만 다운로드할까요? (Y/N): ").strip().upper()
-        if choice != "Y":
-            print("종료합니다.")
-            return
-        print("\nMP3 다운로드 시작...")
-        download_audio(url, title)
-        mp3_path = os.path.join(OUTPUT_FOLDER, f"{title}.mp3")
-        embed_cover_ffmpeg(mp3_path, cover_image, title, artist, year, album, album_artist)
-        fix_single_mp3_title(mp3_path, title)
-        normalize_mp3_year(mp3_path)
-        print("\n[작업 완료]")
-        print(f"MP3: {OUTPUT_FOLDER}/{title}.mp3")
-        return
-
     artist, album, album_artist, cover_image = resolve_album_info(artist, x_detected=x_detected)
+
     print(f"\n영상 제목: {title}")
     print(f"아티스트: {artist}")
     print(f"앨범: {album}")
@@ -241,27 +254,64 @@ def main():
     print(f"커버 이미지: {cover_image or '없음'}")
     print(f"연도: {year}")
 
+    # -----------------------------
+    # 자막 없음 처리
+    # -----------------------------
+    if not langs:
+        choice = input("\nMP3만 다운로드하시겠습니까? (Y/N, 제목 변경은 0): ").strip().upper()
+
+        if choice == "0":
+            new_title = input("새 곡 제목 입력: ").strip()
+            if new_title:
+                title = sanitize_filename(new_title)
+                title = normalize_spaces(title)
+            print(f"새 제목: {title}")
+
+        elif choice != "Y":
+            print("종료")
+            return
+
+        print("\nMP3 다운로드 시작...")
+        download_audio(url, title)
+
+        mp3_path = os.path.join(OUTPUT_FOLDER, f"{title}.mp3")
+        embed_cover_ffmpeg(mp3_path, cover_image, title, artist, year, album, album_artist)
+        fix_single_mp3_title(mp3_path, title)
+        normalize_mp3_year(mp3_path)
+
+        print("\n[작업 완료]")
+        print(f"MP3: {OUTPUT_FOLDER}/{title}.mp3")
+        return
+
+    # -----------------------------
+    # 자막 있음
+    # -----------------------------
     print("\n사용 가능한 자막 목록:")
     for i, lang in enumerate(langs):
         print(f"{i+1}. {lang}")
 
     choice = int(input("\n사용할 자막 번호 선택(제목 변경 시 0 입력): "))
-    if not choice:
+
+    if choice == 0:
         new_title = input("새 곡 제목 입력: ").strip()
         if new_title:
             title = sanitize_filename(new_title)
             title = normalize_spaces(title)
-        print(f'새 제목: {title}')
+        print(f"새 제목: {title}")
+
         for i, lang in enumerate(langs):
             print(f"{i+1}. {lang}")
+
         choice = int(input("\n사용할 자막 번호 선택: "))
 
     selected_lang = langs[choice-1]
-    print(f"\n선택한 언어 자막 다운로드: {selected_lang}")
+
+    print(f"\n선택한 자막 다운로드: {selected_lang}")
     vtt_path = download_subtitle(url, title, selected_lang)
 
     print("\nMP3 다운로드 시작...")
     download_audio(url, title)
+
     mp3_path = os.path.join(OUTPUT_FOLDER, f"{title}.mp3")
     embed_cover_ffmpeg(mp3_path, cover_image, title, artist, year, album, album_artist)
     fix_single_mp3_title(mp3_path, title)

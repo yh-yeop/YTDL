@@ -1,11 +1,10 @@
 import re
 
 # LRC 파일 경로
-input_file = "input.lrc"
-output_file = "output.lrc"
+input_file = r".\utils\lrc_shift\input.lrc"
+output_file = r".\utils\lrc_shift\output.lrc"
 
-# 1초를 빼기 위해 정의
-shift = -1.0  # 1초 앞당기기
+shift = -1.070
 
 def shift_time(match):
     time_str = match.group(1)  # mm:ss.xxx
@@ -28,4 +27,4 @@ new_lines = [re.sub(r"\[(\d+:\d+\.\d+)\]", shift_time, line) for line in lines]
 with open(output_file, "w", encoding="utf-8") as f:
     f.writelines(new_lines)
 
-print("LRC 타임라인이 1초 앞당겨진 파일이 저장됨:", output_file)
+print(f"LRC 타임라인이 {shift}초 밀린 파일이 저장됨:", output_file)
