@@ -92,6 +92,7 @@ def fetch_caption_tracks(video_id):
                     "kind": track.get("kind"),
                     "name": track.get("name", {}).get("simpleText") if isinstance(track.get("name"), dict) else track.get("name")
                 })
+            print(f"[디버그] captionTracks: {result}")  # 임시 디버그 출력
             return result
     except:
         return []
@@ -135,20 +136,41 @@ def load_cookiejar(cookiefile):
 
 def find_caption_track_url(video_id, lang):
     tracks = fetch_caption_tracks(video_id)
-    preferred = None
     for track in tracks:
         if track["lang"] == lang and track.get("kind") != "asr":
             return track["url"]
-        if track["lang"] == lang and preferred is None:
-            preferred = track["url"]
-    return preferred
+    return None
 
 
 def ensure_vtt_url(url):
-    if "fmt=" in url:
-        return url
-    separator = "&" if "?" in url else "?"
-    return url + separator + "fmt=vtt"
+    parsed = urlparse(url)
+    query_params = parse_qs(parsed.query)
+
+    # 수동 자막의 경우 caps 파라미터 제거 (자동 자막 방지)
+    if 'caps' in query_params:
+        del query_params['caps']
+
+    # sparams에서 caps 제거 (서명된 파라미터 목록)
+    if 'sparams' in query_params:
+        sparams = query_params['sparams'][0].split(',')
+        if 'caps' in sparams:
+            sparams.remove('caps')
+        query_params['sparams'] = [','.join(sparams)]
+
+    # fmt=vtt 추가
+    query_params['fmt'] = ['vtt']
+
+    new_query = '&'.join(f"{k}={v[0]}" for k, v in query_params.items())
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{new_query}"
+
+
+def cookiejar_to_header(cookie_jar):
+    if not cookie_jar:
+        return None
+    pairs = []
+    for cookie in cookie_jar:
+        pairs.append(f"{cookie.name}={cookie.value}")
+    return "; ".join(pairs)
 
 
 def download_timedtext(video_id, lang, title, max_retries=3):
@@ -166,9 +188,15 @@ def download_timedtext(video_id, lang, title, max_retries=3):
         try:
             with requests.Session() as session:
                 if cookie_jar:
-                    session.cookies = cookie_jar
+                    cookie_dict = {cookie.name: cookie.value for cookie in cookie_jar}
+                    session.cookies.update(cookie_dict)
+                    cookie_header = cookiejar_to_header(cookie_jar)
+                else:
+                    cookie_header = None
                 headers = DEFAULT_YT_HEADERS.copy()
                 headers["User-Agent"] = ua_variants[attempt % len(ua_variants)]
+                if cookie_header:
+                    headers["Cookie"] = cookie_header
                 session.headers.update(headers)
                 session.get(watch_url, timeout=10)
 
@@ -177,6 +205,7 @@ def download_timedtext(video_id, lang, title, max_retries=3):
                     print("[자막] captionTracks URL을 찾을 수 없음")
                     return None
                 fallback_url = ensure_vtt_url(fallback_url)
+                print(f"[자막] timedtext URL: {fallback_url}")
 
                 r = session.get(
                     fallback_url,
@@ -184,12 +213,14 @@ def download_timedtext(video_id, lang, title, max_retries=3):
                         "Referer": watch_url,
                         "Accept": "text/vtt,*/*;q=0.8",
                         "Origin": "https://www.youtube.com",
+                        "Cookie": cookie_header or "",
                     },
                     timeout=15,
+                    allow_redirects=True,
                 )
                 content_type = r.headers.get("Content-Type", "")
                 content_length = len(r.content or b"")
-                print(f"[자막] timedtext 응답 상태: {r.status_code}, Content-Type={content_type}, 길이={content_length}")
+                print(f"[자막] timedtext 응답 상태: {r.status_code}, Content-Type={content_type}, 길이={content_length}, 최종 URL={r.url}")
                 if r.status_code == 200 and r.content and content_length > 0:
                     body = r.content.decode("utf-8", errors="replace")
                     if body.strip() and not body.lstrip().startswith("<"):
