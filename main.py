@@ -187,12 +187,17 @@ def download_timedtext(video_id, lang, title, max_retries=3):
                     },
                     timeout=15,
                 )
-                print(f"[자막] timedtext 응답 상태: {r.status_code}")
-                if r.status_code == 200 and r.text.strip():
-                    with open(path, "w", encoding="utf-8") as f:
-                        f.write(r.text)
-                    print(f"[자막] timedtext 다운로드 성공: {path}")
-                    return path
+                content_type = r.headers.get("Content-Type", "")
+                content_length = len(r.content or b"")
+                print(f"[자막] timedtext 응답 상태: {r.status_code}, Content-Type={content_type}, 길이={content_length}")
+                if r.status_code == 200 and r.content and content_length > 0:
+                    body = r.content.decode("utf-8", errors="replace")
+                    if body.strip() and not body.lstrip().startswith("<"):
+                        with open(path, "w", encoding="utf-8") as f:
+                            f.write(body)
+                        print(f"[자막] timedtext 다운로드 성공: {path}")
+                        return path
+                    print(f"[자막] timedtext 본문이 VTT가 아닙니다: {body[:120]!r}")
                 if r.status_code == 429:
                     raise Exception("429 Too Many Requests")
         except Exception as e:
