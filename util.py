@@ -144,6 +144,7 @@ def vtt_to_lrc(vtt_path, lrc_path):
     for c in webvtt.read(vtt_path):
         ms = timestamp_to_ms(c.start)
         text = c.text.replace("\n", " ").replace("&nbsp;", "")
+        text = re.sub(r'<[^>]+>', '', text)  # HTML 태그 제거 (특수효과 태그)
         text = re.sub(ZERO_WIDTH, "", text).strip()
         entries.append((ms, text))
 

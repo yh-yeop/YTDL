@@ -86,13 +86,21 @@ def fetch_caption_tracks(video_id):
                 base_url = track.get("baseUrl")
                 if not lang or not base_url:
                     continue
+                name = track.get("name", {}).get("simpleText") if isinstance(track.get("name"), dict) else track.get("name")
+                # isCC, vssId 등으로 자막 타입 판단
+                is_cc = track.get("isCC", False)
+                vss_id = track.get("vssId", "")
+                is_special = "cc" in vss_id.lower() or name and any(x in name.lower() for x in ["special", "effect", "(cc)"])
                 result.append({
                     "lang": lang,
                     "url": base_url,
                     "kind": track.get("kind"),
-                    "name": track.get("name", {}).get("simpleText") if isinstance(track.get("name"), dict) else track.get("name")
+                    "name": name,
+                    "vssId": vss_id,
+                    "isCC": is_cc,
+                    "isSpecial": is_special
                 })
-            print(f"[디버그] captionTracks: {result}")  # 임시 디버그 출력
+            print(f"[디버그] captionTracks ({len(result)}개): {json.dumps(result, ensure_ascii=False, indent=2)}")  # 상세 디버그
             return result
     except:
         return []
@@ -173,18 +181,58 @@ def cookiejar_to_header(cookie_jar):
     return "; ".join(pairs)
 
 
+def try_download_format(url, fmt, video_id, lang, title, watch_url, cookie_jar, cookie_header):
+    """특정 포맷(vtt/srv3)으로 자막 다운로드 시도"""
+    ext = fmt
+    path = os.path.join(OUTPUT_FOLDER, f"{title}.{lang}.{ext}")
+    
+    # 원본 URL에 fmt 파라미터만 추가 (signature 유지)
+    parsed = urlparse(url)
+    query_params = parse_qs(parsed.query)
+    query_params['fmt'] = [fmt]
+    new_query = '&'.join(f"{k}={v[0]}" for k, v in query_params.items())
+    fmt_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{new_query}"
+    
+    print(f"[자막] {fmt} 시도: {fmt_url}")
+    
+    try:
+        with requests.Session() as session:
+            if cookie_jar:
+                cookie_dict = {cookie.name: cookie.value for cookie in cookie_jar}
+                session.cookies.update(cookie_dict)
+            
+            headers = DEFAULT_YT_HEADERS.copy()
+            if cookie_header:
+                headers["Cookie"] = cookie_header
+            
+            r = session.get(
+                fmt_url,
+                headers=headers,
+                timeout=15,
+                allow_redirects=True,
+            )
+            
+            content_length = len(r.content or b"")
+            print(f"[자막] {fmt} 응답: 상태={r.status_code}, 길이={content_length}")
+            
+            if r.status_code == 200 and r.content and content_length > 100:  # 최소 길이 체크
+                body = r.content.decode("utf-8", errors="replace")
+                if body.strip():
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(body)
+                    print(f"[자막] {fmt} 다운로드 성공: {path}")
+                    return path
+    except Exception as e:
+        print(f"[자막] {fmt} 시도 실패: {e}")
+    
+    return None
+
+
 def download_timedtext(video_id, lang, title, max_retries=3):
-    path = os.path.join(OUTPUT_FOLDER, f"{title}.{lang}.vtt")
     watch_url = f"https://www.youtube.com/watch?v={video_id}"
     cookie_jar = load_cookiejar(COOKIE_FILE)
-    ua_variants = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    ]
-
+    
     for attempt in range(max_retries):
-        print(f"[자막] timedtext 직접 다운로드 시도 {attempt + 1}/{max_retries} (UA={ua_variants[attempt % len(ua_variants)]})")
         try:
             with requests.Session() as session:
                 if cookie_jar:
@@ -193,48 +241,48 @@ def download_timedtext(video_id, lang, title, max_retries=3):
                     cookie_header = cookiejar_to_header(cookie_jar)
                 else:
                     cookie_header = None
+                
                 headers = DEFAULT_YT_HEADERS.copy()
-                headers["User-Agent"] = ua_variants[attempt % len(ua_variants)]
-                if cookie_header:
-                    headers["Cookie"] = cookie_header
                 session.headers.update(headers)
                 session.get(watch_url, timeout=10)
 
+                # captionTracks baseUrl 사용 (그대로 사용)
                 fallback_url = find_caption_track_url(video_id, lang)
                 if not fallback_url:
                     print("[자막] captionTracks URL을 찾을 수 없음")
                     return None
-                fallback_url = ensure_vtt_url(fallback_url)
-                print(f"[자막] timedtext URL: {fallback_url}")
-
+                
+                # 원본 URL 그대로 사용 (signature 유지, caps도 유지)
+                path = os.path.join(OUTPUT_FOLDER, f"{title}.{lang}.vtt")
+                print(f"[자막] 원본 URL (signature 유지): {fallback_url[:80]}...")
+                
                 r = session.get(
                     fallback_url,
-                    headers={
-                        "Referer": watch_url,
-                        "Accept": "text/vtt,*/*;q=0.8",
-                        "Origin": "https://www.youtube.com",
-                        "Cookie": cookie_header or "",
-                    },
+                    headers=headers,
                     timeout=15,
                     allow_redirects=True,
                 )
-                content_type = r.headers.get("Content-Type", "")
+                
                 content_length = len(r.content or b"")
-                print(f"[자막] timedtext 응답 상태: {r.status_code}, Content-Type={content_type}, 길이={content_length}, 최종 URL={r.url}")
-                if r.status_code == 200 and r.content and content_length > 0:
+                print(f"[자막] 응답: 상태={r.status_code}, 길이={content_length}")
+                
+                if r.status_code == 200 and r.content and content_length > 50:
                     body = r.content.decode("utf-8", errors="replace")
-                    if body.strip() and not body.lstrip().startswith("<"):
+                    if body.strip():
                         with open(path, "w", encoding="utf-8") as f:
                             f.write(body)
-                        print(f"[자막] timedtext 다운로드 성공: {path}")
+                        print(f"[자막] 다운로드 성공: {path}")
                         return path
-                    print(f"[자막] timedtext 본문이 VTT가 아닙니다: {body[:120]!r}")
-                if r.status_code == 429:
-                    raise Exception("429 Too Many Requests")
+                    else:
+                        print(f"[자막] 본문이 비어있음. 원인: caps=asr 또는 자막 없음")
+                else:
+                    print(f"[자막] 응답 상태 {r.status_code} 또는 길이 부족")
+                
         except Exception as e:
-            print(f"[자막] timedtext 시도 실패: {e}")
+            print(f"[자막] 시도 실패: {e}")
             if attempt < max_retries - 1:
                 time.sleep(2 + attempt * 2)
+    
     return None
 
 
@@ -619,7 +667,10 @@ def main():
 
     if vtt_path:
         lrc_path = os.path.join(OUTPUT_FOLDER, f"{title}.lrc")
-        vtt_to_lrc(vtt_path, lrc_path)
+        if vtt_path.endswith('.srv3'):
+            srv3_to_lrc(vtt_path, lrc_path)
+        else:
+            vtt_to_lrc(vtt_path, lrc_path)
 
     print("\n[작업 완료]")
     print(f"MP3: {OUTPUT_FOLDER}/{title}.mp3")
