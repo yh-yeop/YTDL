@@ -174,6 +174,62 @@ def vtt_to_lrc(vtt_path, lrc_path):
     except:
         pass
 
+
+def srv3_to_lrc(srv3_path, lrc_path):
+    from xml.etree import ElementTree as ET
+
+    def timestamp_to_ms(ts):
+        return int(float(ts) * 1000)
+
+    def ms_to_lrc(ms):
+        minutes = ms // 60000
+        seconds = (ms % 60000) // 1000
+        ms = ms % 1000
+        return f"[{minutes:02}:{seconds:02}.{ms:03}]"
+
+    try:
+        tree = ET.parse(srv3_path)
+        root = tree.getroot()
+    except:
+        print(f"[오류] srv3 파싱 실패: {srv3_path}")
+        return
+
+    entries = []
+    for text_elem in root:
+        if text_elem.tag == 'text':
+            start = text_elem.get('start')
+            dur = text_elem.get('dur')  # 사용하지 않음
+            text = text_elem.text or ''
+            text = re.sub(r'<[^>]+>', '', text).strip()  # 특수 효과 태그 제거
+            if text:
+                ms = timestamp_to_ms(start)
+                entries.append((ms, text))
+
+    def is_noise(text):
+        return bool(re.fullmatch(r"[!¡.,…?]+", text))
+
+    cleaned = [(ms, t) for ms, t in entries if t and not is_noise(t)]
+
+    TH = 110
+    merged = []
+    last_added_ms = {}
+
+    for ms, t in cleaned:
+        if t in last_added_ms and (ms - last_added_ms[t]) <= TH:
+            continue
+        merged.append((ms, t))
+        last_added_ms[t] = ms
+
+    with open(lrc_path, "w", encoding="utf-8") as f:
+        for ms, t in merged:
+            f.write(f"{ms_to_lrc(ms)}{t}\n")
+
+    try:
+        os.remove(srv3_path)
+    except:
+        pass
+
+
 def year_fix(path):
     try:
         try:
